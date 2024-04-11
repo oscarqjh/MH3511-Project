@@ -1,0 +1,450 @@
+---
+Title: "3511 PROJECT R scripts"
+Co-Authors: "Oscar, Cheng Yao, Jun Hao, Iain, Zane"
+
+---
+
+----------------------------------------------------------------------------------------------------------------
+# START 
+----------------------------------------------------------------------------------------------------------------
+```{r setup, include=FALSE}
+# # Installation of packages
+# install.packages("caTools")
+# install.packages("GGally")
+library(caTools)
+library(tidyr)
+library(GGally)
+
+#################### For .Rmd file ####################
+# Data set source: 
+data = read.csv("Spotify_Youtube.csv", header = T) # <- uncomment if run on .Rmd file
+
+#################### For .R file ####################
+# Data set source: 
+# data = read.csv("# insert filepath here #", header = T) # <- uncomment if run on .R file
+```
+
+----------------------------------------------------------------------------------------------------------------
+# 3 DESCRIPTION AND CLEANING DATASET
+----------------------------------------------------------------------------------------------------------------
+```{r}
+# Drop unused columns
+column_to_drop = c("Url_spotify", "Track", "Album", "Uri", "Url_youtube", "Title", "Channel", "Description")
+data = data[,!(names(data) %in% column_to_drop)]
+
+########## For .R file ##########
+# check for na in the official_video column, if there is, assign it to "FALSE"  
+# data[is.na(data$official_video),]$official_video = "FALSE" #<- uncomment if run on .R file
+
+########## For .Rmd file ##########
+# check for empty string in the official_video column, if there is, assign it to "FALSE"  
+data[which(data$official_video == ""),]$official_video = "FALSE" #<- uncomment if run on .Rmd file
+
+# convert official_video to boolean
+data$official_video = as.logical(data$official_video) # Cast as Boolean (Logical)
+
+# Acousticness, Instrumentalness, Liveness
+# Since number of NA values is small compared to number of data points, remove them
+# Instrumentalness, Liveness excluded from analysis
+clean_data = data %>% drop_na(c("Acousticness", "Instrumentalness", "Liveness"))
+
+# Logit-transform Function to transform values heavily skewed to 0
+logit = function(x) {log(x / (1 - x))} 
+
+# Logit-transform Acousticness
+clean_data$log_Acousticness = logit(clean_data$Acousticness)
+
+c("Danceability", "Energy", "Valence", "Tempo", "Duration(second)", "Views", "Likes", "Comments", "Album_type", "Licensed")
+
+# Key, Loudness, Speech, Valence
+key_row_todrop <- clean_data[is.na(clean_data$Key) | clean_data$Key == -1 ,]
+loudness_row_todrop <- clean_data[is.na(clean_data$Loudness),]
+speech_row_todrop <- clean_data[is.na(clean_data$Speechiness) | clean_data$Speechiness < 0 | clean_data$Speechiness > 1,]
+valence_row_todrop <- clean_data[is.na(clean_data$Valence) | clean_data$Valence < 0.0 | clean_data$Valence > 1.0,]
+rows_todrop <- unique(rbind(key_row_todrop$X, loudness_row_todrop$X, speech_row_todrop$X, valence_row_todrop$X))
+clean_data <- clean_data[!clean_data$X %in% rows_todrop,]
+
+# Logit-transform Speechiness
+clean_data$log_Speechiness = logit(clean_data$Speechiness)
+clean_data = subset(clean_data, !is.infinite(log_Speechiness)) # Remove infinite
+
+# Views, Likes, Comments, Licensed
+# drop rows in data_sub with null values
+clean_data = clean_data %>% drop_na(c("Views", "Likes", "Comments", "Licensed"))
+
+# log transform
+clean_data$log_Views = log1p(clean_data$Views)
+clean_data$log_Likes = log1p(clean_data$Likes)
+clean_data$log_Comments = log1p(clean_data$Comments)
+clean_data
+
+# Tempo, Duration_ms
+# Drop NA
+clean_data = clean_data %>% drop_na(c("Tempo", "Duration_ms", "Stream"))
+clean_data
+
+# convert ms to seconds
+clean_data$Duration_s <- clean_data$Duration_ms/1000
+
+# Log-Transform
+clean_data$log_Duration_s = log(clean_data$Duration_s)
+
+# Dependent Variable: Stream
+# Drop all NA in Streams
+clean_data = clean_data %>% drop_na(Stream)
+
+# Normalising Streams (Log-transform)
+clean_data$log_Stream = log(clean_data$Stream)
+
+# Check summary and types of variables
+summary(clean_data)
+categorical = sapply(clean_data,is.character)
+
+# Convert categorical variables to numeric
+clean_data[ ,categorical] = lapply(clean_data[ ,categorical],function (x) as.numeric(factor(x)))
+class(clean_data$Licensed)
+
+# Independent Variables
+IV = c("Danceability", "Energy", "Loudness", "log_Speechiness", "log_Acousticness", "Valence", "Tempo", "log_Duration_s", "log_Views", "log_Likes", "log_Comments", "Album_type", "Key", "Licensed", "official_video")
+```
+
+----------------------------------------------------------------------------------------------------------------
+## 3.1 Summary statistics for Main Variable: Stream
+----------------------------------------------------------------------------------------------------------------
+```{r}
+# Plot a Histogram distribution of mean Streams
+par(mfrow = c(1,2))
+hist(clean_data$Stream, xlab = "Streams", ylab = "Number of Songs", main = "Histogram of Streams")
+
+# Plot a Histogram distribution of ln(Streams)
+par(mfrow = c(1,2))
+hist(clean_data$log_Stream, xlab = "ln(Streams)", ylab = "Number of Songs", main = "Histogram of ln(Streams)")
+
+# Plot a Boxplot of ln(Streams)
+par(mfrow = c(1,2))
+boxplot(clean_data$log_Stream, xlab = "ln(Streams)", ylab = "Number of Songs", main = "Boxplot of ln(Streams)")
+```
+
+----------------------------------------------------------------------------------------------------------------
+## 3.2 Summary statistics for other variables
+----------------------------------------------------------------------------------------------------------------
+### 3.2.1 Danceability
+```{r}
+# plot histogram for Danceability in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Danceability, main = "Histogram of Danceability", xlab = "Danceability")
+
+# plot boxplot for Danceability in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$Danceability, main = "Boxplot of Danceability")
+```
+
+### 3.2.2 Energy
+```{r}
+# plot histogram for Energy in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Energy, main = "Histogram of Energy", xlab = "Energy")
+
+# plot boxplot for Energy in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$Energy, main = "Boxplot of Energy")
+```
+
+### 3.2.3 Loudness
+```{r}
+# plot histogram for Loudness in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Loudness, main = "Histogram of Loudness", xlab = "Loudness")
+
+# plot boxplot for Loudness in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$Loudness, main = "Boxplot of Loudness")
+```
+
+### 3.2.4 Speechiness
+```{r}
+# plot histogram for Speechiness in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Speechiness, main = "Histogram of Speechiness", xlab = "Speechiness")
+
+# plot histogram for log_Speechiness in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$log_Speechiness, main = "Histogram of ln(Speechiness)", xlab = "ln(Speechiness)")
+
+# plot boxplot for Speechiness in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$Speechiness, main = "Boxplot of Speechiness")
+```
+
+### 3.2.5 Acousticness
+```{r}
+# plot histogram for Acousticness in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Acousticness, main = "Histogram of Acousticness", xlab = "Acousticness")
+
+# plot histogram for logit_Acousticness in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$log_Acousticness, main = "Histogram of logit(Acousticness)", xlab = "ln(Acousticness)")
+
+# plot boxplot for logit_Acousticness in clean_data
+boxplot(clean_data$log_Acousticness, main = "Boxplot of logit(Acousticness)")
+```
+
+### 3.2.6 Valence
+```{r}
+# plot histogram for Valence in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Valence, main = "Histogram of Valence", xlab = "Valence")
+
+# plot boxplot for Valence in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$Valence, main = "Boxplot of Valence")
+```
+
+### 3.2.7 Tempo
+```{r}
+# plot histogram for Tempo in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Tempo, main = "Histogram of Tempo", xlab = "Tempo")
+
+# plot boxplot for Tempo in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$Tempo, main = "Boxplot of Tempo")
+```
+
+### 3.2.8 Duration_s
+```{r}
+# plot histogram for Duration_s in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Duration_s, main = "Histogram of Duration_s", xlab = "Duration_s")
+
+# plot histogram for log_Duration_s in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$log_Duration_s, main = "Histogram of ln(Duration_s)", xlab = "ln(Duration_s)")
+
+# plot boxplot for log_Duration_s in clean_data
+par(mfrow = c(1,2))
+boxplot(clean_data$log_Duration_s, main = "Boxplot of ln(Duration_s)")
+```
+
+### 3.2.9 Views
+```{r}
+# plot histogram for Views in clean_data
+par(mfrow = c(1,2))
+hist(clean_data$Views, main = "Histogram of Views", xlab = "Views")
+
+# plot histogram for log_Views in clean_data 
+par(mfrow = c(1,2))
+hist(clean_data$log_Views, main = "Histogram of ln(Views)", xlab = "ln(Views)")
+
+par(mfrow = c(1,2))
+boxplot(clean_data$log_Views, main = "Boxplot of ln(Views)")
+```
+
+### 3.2.10 Likes
+```{r}
+par(mfrow = c(1,2))
+hist(clean_data$Likes, main = "Histogram of Likes", xlab = "Likes")
+
+par(mfrow = c(1,2))
+hist(clean_data$log_Likes, main = "Histogram of ln(Likes)", xlab = "ln(Likes)")
+
+par(mfrow = c(1,2))
+boxplot(clean_data$log_Likes, main = "Boxplot of ln(Likes)")
+```
+
+### 3.2.11 Comments
+```{r}
+par(mfrow = c(1,2))
+hist(clean_data$Comments, main = "Histogram of Comments", xlab = "Comments")
+
+par(mfrow = c(1,2))
+hist(clean_data$log_Comments, main = "Histogram of ln(Comments)", xlab = "ln(Comments)")
+
+par(mfrow = c(1,2))
+boxplot(clean_data$log_Comments, main = "Boxplot of ln(Comments)")
+```
+
+### 3.2.12 Album_type
+```{r}
+# plot bar plot for Album_type in clean_data
+barplot(table(clean_data$Album_type), main = "Barplot of Album_type", xlab = "Album Type", ylab = "Frequency")
+```
+
+### 3.2.13 Key
+```{r}
+# plot bar plot for Key in clean_data
+barplot(table(clean_data$Key), main = "Barplot of Distinct Key Integers", xlab = "Key", ylab = "Count")
+```
+
+### 3.2.14 Licensed
+```{r}
+# plot bar plot for Licensed in clean_data
+barplot(table(clean_data$Licensed), main = "Barplot of Licensed", xlab = "Licensed", ylab = "Frequency")
+```
+
+### 3.2.15 official_video
+```{r}
+# plot bar plot for official_video in clean_data
+barplot(table(clean_data$official_video), main = "Barplot of official_video", xlab = "Does Official Video Exist?", ylab = "Frequency")
+```
+
+----------------------------------------------------------------------------------------------------------------
+## 4.1 Correlation between ln(Stream) and other Continuous Variables
+Multivariate pair plots to visualise the correlation between ln(Stream) and other continuous variables
+----------------------------------------------------------------------------------------------------------------
+```{r}
+# First half of the multivariate ggpair plot
+# correlation of log(Stream) with log(Views), log(Likes), log(Comments), log(Duration(second)), log(Speechiness)
+first_half = clean_data[c("log_Stream", "log_Views", "log_Likes", "log_Comments", "log_Duration_s", "log_Speechiness")]
+ggpairs(first_half)
+
+
+# Second half of the multivariate ggpair plot
+# correlation of log(Stream) with, Danceability, Energy, Loudness, log(Acousticness), Valence, Tempo
+second_half = clean_data[c("log_Stream", "Danceability", "Energy", "Loudness", "log_Acousticness", "Valence", "Tempo")]
+ggpairs(second_half)
+```
+
+----------------------------------------------------------------------------------------------------------------
+## 4.2 Statistical Test
+----------------------------------------------------------------------------------------------------------------
+### 4.2.1 YouTube Views vs Spotify Stream
+```{r}
+# Perform paired t-test to check if the mean of Stream and Views are equal
+# H0: u1 = u2
+# H1: u1 > u2
+t.test(clean_data$log_Stream, clean_data$log_Views, alternative = "greater", paired = TRUE)
+```
+
+### 4.2.2	Relation between Streams and Music Video
+```{r}
+# Extract Stream and official_video column from clean_data
+data <- clean_data[,c("log_Stream", "official_video")]
+
+# separate the data into two dataframes group by official_video
+official_video <- data[data$official_video == TRUE,]
+non_official_video <- data[data$official_video == FALSE,]
+
+# Plot boxplot of Stream for official_video and non_official_video
+boxplot(official_video$log_Stream, non_official_video$log_Stream, names = c("With Music Video", "Without Music Video"), ylab = "log(stream")
+
+# Perform F-test to check if the variance of Stream for official_video and non_official_video are equal
+var.test(official_video$log_Stream, non_official_video$log_Stream)
+
+# Perform t-test to check if the mean of Stream for official_video and non_official_video are equal, with variance assumed to be not equal
+# H0: u1 = u2
+# H1: u1 > u2
+t.test(official_video$log_Stream, non_official_video$log_Stream, alternative = "greater", var.equal = FALSE)
+```
+
+### 4.2.3	Relation between Streams and Tempo
+```{r}
+# Perform Pearson correlation test to check the correlation between log_Stream and Tempo
+# H0: There is no correlation between log_Stream and Tempo (rho = 0)
+# H1: There is a correlation between log_Stream and Tempo (rho != 0)
+cor.test(clean_data$log_Stream, clean_data$Tempo)
+```
+
+### 4.2.4	The single most important song characteristic that is affecting streams
+```{r}
+  # 4.2.4 The single most important song characteristic that is affecting streams  
+
+# Fit the initial model 
+model1 = lm(log_Stream ~ Danceability, data = clean_data) 
+model2 = lm(log_Stream ~ Energy, data = clean_data) 
+model3 = lm(log_Stream ~ Loudness, data = clean_data) 
+model4 = lm(log_Stream ~ log_Acousticness, data = clean_data) 
+model5 = lm(log_Stream ~ Valence, data = clean_data) 
+model6 = lm(log_Stream ~ Tempo, data = clean_data)  
+
+# Extract information for each model (replace "model_name" with actual names) 
+models <- list(model1=model1, model2=model2, model3=model3, model4=model4, model5=model5, model6=model6)  
+for (model_name in names(models)) {   
+  current_model <- models[[model_name]]      
+
+# Extract coefficients   
+coefficients <- summary(current_model)$coefficients    
+
+# Calculate p-values for coefficients   
+p_values <- summary(current_model)$coefficients[, 4]  
+
+# Extract p-values from summary      
+# Calculate R-squared   
+r_squared <- summary(current_model)$r.squared      
+
+# Print results    
+cat("Model:", model_name, "\n")   
+cat("Coefficients:\n", coefficients, "\n")   
+cat("P-values:\n", p_values, "\n")   
+cat("R-squared:", r_squared, "\n")   
+cat("\n") }
+
+# Generate qq-plot of residuals   
+qqnorm(model1$residuals)   # model1, Danceability
+qqline(model1$residuals)
+
+qqnorm(model2$residuals)   # model2, Energy
+qqline(model2$residuals)
+
+qqnorm(model3$residuals)   # model3, Loudness
+qqline(model3$residuals)
+
+qqnorm(model4$residuals)   # model4, log_Acousticness
+qqline(model4$residuals)
+
+qqnorm(model5$residuals)   # model5, Valence
+qqline(model5$residuals)
+
+qqnorm(model6$residuals)   # model6, Tempo
+qqline(model6$residuals)
+```
+
+----------------------------------------------------------------------------------------------------------------
+## 4.3 Multiple Linear Regression
+----------------------------------------------------------------------------------------------------------------
+```{r}
+# Compile into a DF for Regression
+regression_df = clean_data[c(IV,"log_Stream")]
+regression_df
+
+# Splitting the dataset into 80% train, 20% test
+regression_split = sample.split(regression_df$log_Stream,SplitRatio = 0.8)
+train = subset(regression_df, regression_split == TRUE)
+test = subset(regression_df, regression_split == FALSE)
+test
+names(train)
+# Fit the linear regression model with the test set
+linreg = lm(log_Stream~Danceability+Energy+Loudness+log_Speechiness+log_Acousticness+Valence+Tempo+log_Duration_s+log_Views+log_Likes+log_Comments+Album_type+Key+Licensed+official_video, data = train)
+summary(linreg)
+
+# Only use significant variables in the refined MLR model
+linreg_significant = lm(log_Stream~Energy+Loudness+log_Speechiness+log_Acousticness+Valence+log_Duration_s+log_Views+log_Likes+log_Comments+Album_type+official_video, data = train)
+summary(linreg_significant)
+
+# Predict results of the test set using our trained model
+test$predicted_log_Stream = predict(linreg_significant,test)
+
+# Plot Actual and Predicted log(Streams)
+plot(test$log_Stream,test$predicted_log_Stream,xlab = "Actual log(Stream)", ylab = "Predicted log(Stream)", main = "Predicted Streams vs Actual Streams (Log-Transformed)")
+
+# Plot a best fit line
+abline(lm(test$predicted_log_Stream~test$log_Stream))
+
+# Calculate residuals
+residuals <- test$log_Stream - test$predicted_log_Stream
+# Square the residuals
+squared_residuals <- residuals^2
+# Calculate mean squared residuals
+mean_squared_residuals <- mean(squared_residuals)
+# Calculate RMSE
+rmse <- sqrt(mean_squared_residuals)
+
+print(rmse)
+```
+
+----------------------------------------------------------------------------------------------------------------
+# END 
+----------------------------------------------------------------------------------------------------------------
+
+

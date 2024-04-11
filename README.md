@@ -3,7 +3,7 @@
 ## Data Analysis: Numbers in Spotify and YouTube: Views, Likes and Streams
 
 <div>
-<img src="http://img.shields.io/badge/R-276DC3?style=flat-square&logo=r&logoColor=black" alt="R">
+<img src="http://img.shields.io/badge/R-276DC3?style=flat-square&logo=r&logoColor=white" alt="R">
 
 </div>
 

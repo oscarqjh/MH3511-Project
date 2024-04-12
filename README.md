@@ -15,7 +15,7 @@
 - [Lee Cheng Yao, Bruise](https://github.com/chengyaolee)
 - [Zane Yee Sun](https://github.com/zazzane)
 - [Oscar Qian](https://github.com/oscarqjh)
-
+- [Yau Jun Hao](https://github.com/junhao21xd)
 ---
 
 ### Environment Set up & Dataset (Recommended)
